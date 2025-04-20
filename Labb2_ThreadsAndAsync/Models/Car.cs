@@ -1,6 +1,6 @@
 ﻿namespace Labb2_ThreadsAndAsync.Models
 {
-    internal class Car
+    public class Car
     {
         public string Name { get; set; }
         public double Distance { get; set; } = 0; // Körd sträcka

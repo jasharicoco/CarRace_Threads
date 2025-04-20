@@ -1,12 +1,11 @@
-﻿using Labb2_ThreadsAndAsync.Handler;
-
-namespace Labb2_ThreadsAndAsync
+﻿namespace Labb2_ThreadsAndAsync
 {
     class Program
     {
-        static void Main()
+        static async Task Main(string[] args)
         {
-            Handler.Handler.Run();
+            // Starta tävlingen
+            await Handler.Handler.Run();
         }
     }
 }

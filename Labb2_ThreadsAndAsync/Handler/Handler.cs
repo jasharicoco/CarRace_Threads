@@ -1,4 +1,5 @@
-﻿using Labb2_ThreadsAndAsync.Models;
+﻿using Labb2_ThreadsAndAsync.Interface;
+using Labb2_ThreadsAndAsync.Models;
 
 namespace Labb2_ThreadsAndAsync.Handler
 {
@@ -8,77 +9,37 @@ namespace Labb2_ThreadsAndAsync.Handler
         static object statusLock = new object();
         static bool raceOver = false;
         static bool winnerFound = false;
-        static int startedCount = 0; // Variabel för att skriva ut en tom rad efter alla bilar startat
-        private static readonly Random rng = new Random(); // Random-genererare för olyckor
-        private static int eventRow = 0; // Håller reda på aktuell rad för händelser
-        private static readonly int statusColumn = 60; // Startkolumn för statusuppdateringar
-        private static readonly int maxWidth = Console.WindowWidth; // Konsolens bredd
-        private static readonly object consoleLock = new object(); // Lås för konsolutskrifter
+        static int startedCount = 0;
+        private static readonly Random rng = new Random();
 
-        // Hjälpfunktion för att skriva händelser i vänster kolumn
-        private static void WriteEvent(string message)
-        {
-            lock (consoleLock)
-            {
-                Console.SetCursorPosition(0, eventRow);
-                Console.WriteLine(message.PadRight(55)); // Fyll ut till kolumn 55
-                eventRow++;
-                // Om vi når botten av konsolen, rulla eller rensa
-                if (eventRow >= Console.WindowHeight - 1)
-                {
-                    Console.Clear();
-                    eventRow = 0;
-                    Console.SetCursorPosition(0, 0);
-                    Console.WriteLine("🏁 Tävlingen fortsätter!\n");
-                }
-            }
-        }
-
-        // Hjälpfunktion för att rensa höger kolumn
-        private static void ClearStatusColumn()
-        {
-            lock (consoleLock)
-            {
-                for (int row = 0; row < Console.WindowHeight; row++)
-                {
-                    Console.SetCursorPosition(statusColumn, row);
-                    Console.Write(new string(' ', maxWidth - statusColumn));
-                }
-            }
-        }
-
-        public static void Run()
+        public static async Task Run()
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
             Console.Clear();
-            eventRow = 0;
 
-            // Initiera bilar
+            // Skapa bilar
             cars.Add(new Car { Name = "Blixten" });
             cars.Add(new Car { Name = "Turbo" });
             cars.Add(new Car { Name = "Vroom" });
             cars.Add(new Car { Name = "Inferno" });
 
-            List<Thread> threads = new List<Thread>();
+            List<Task> tasks = new List<Task>();
 
-            // Skapa trådar för varje bil
+            // Användarinput i en separat thread
+            Task inputTask = Task.Run(() => UserInput());
+            tasks.Add(inputTask);
+
+            ConsoleInterface.WriteEvent("🏁 Tävlingen börjar!");
+            ConsoleInterface.WriteEvent("");
+
+            // Starta en task för varje bil
             foreach (var car in cars)
             {
-                Thread t = new Thread(() => Drive(car));
-                threads.Add(t);
+                Task t = Task.Run(() => Drive(car));
+                tasks.Add(t);
             }
 
-            // Starta användarinput i separat tråd
-            Thread inputThread = new Thread(UserInput);
-            inputThread.Start();
-
-            WriteEvent("🏁 Tävlingen börjar!\n");
-
-            // Starta alla biltrådar
-            foreach (var t in threads)
-                t.Start();
-
-            // Kontrollera vinnare under racets gång
+            // Leta efter vinnare
             while (!raceOver)
             {
                 lock (statusLock)
@@ -87,7 +48,7 @@ namespace Labb2_ThreadsAndAsync.Handler
                     if (winner != null)
                     {
                         winner.Winner = true;
-                        WriteEvent($"\n🏆 {winner.Name} vann tävlingen!");
+                        ConsoleInterface.WriteEvent($"\n🏆 {winner.Name} vann tävlingen!");
                         winnerFound = true;
                         raceOver = true;
                     }
@@ -96,84 +57,93 @@ namespace Labb2_ThreadsAndAsync.Handler
                     {
                         if (!winnerFound)
                         {
-                            WriteEvent("\n💥 Alla bilar har förstörts innan mållinjen. Ingen vinnare i detta lopp.");
+                            ConsoleInterface.WriteEvent("\n💥 Alla bilar har förstörts innan mållinjen. Ingen vinnare i detta lopp.");
                         }
                         raceOver = true;
                     }
                 }
 
-                Thread.Sleep(1000);
+                await Task.Delay(1000);
             }
 
-            // Vänta på att alla trådar ska avslutas
-            foreach (var t in threads)
-                t.Join();
+            // Invänta samtliga tasks
+            await Task.WhenAll(tasks);
 
-            WriteEvent("\n✅ Alla bilar har nått mållinjen eller förstörts.");
-            WriteEvent("🏁 Tävlingen är avslutad!");
+            ConsoleInterface.WriteEvent("\n✅ Alla bilar har nått mållinjen eller förstörts.");
+            ConsoleInterface.WriteEvent("🏁 Tävlingen är avslutad!");
         }
 
-        static void Drive(Car car)
+        static async Task Drive(Car car)
         {
             double speedInMetersPerSecond = car.Speed * 1000 / 3600;
             int secondsPassed = 0;
 
-            WriteEvent($"{car.Name} startar!");
+            ConsoleInterface.WriteEvent($"{car.Name} startar!");
 
             lock (statusLock)
             {
                 startedCount++;
                 if (startedCount == cars.Count)
                 {
-                    WriteEvent(""); // Tom rad efter sista bilen startat
+                    ConsoleInterface.WriteEvent("");
                 }
             }
 
             try
             {
+                // Medans bilen fortfarande inte kört i mål
                 while (car.Distance < 5000)
                 {
-                    Thread.Sleep(1000);
+                    // Varje sekund
+                    await Task.Delay(1000);
 
+                    // Endast en tråd kommer åt detta åt gången för att undvika fel
                     lock (statusLock)
                     {
-                        // Kontrollera om bilen är pausad
+                        // Pausad bil hamnar i detta block
                         if (car.IsPaused)
                         {
+                            // Pausad bil släpps lös när Nuvarande tid når PausadTill-tiden
+                            // som sattes vid olyckan
                             if (DateTime.Now >= car.PauseUntil)
                             {
-                                // Pausen är över
                                 car.IsPaused = false;
-                                WriteEvent($"{car.Name}: Fortsätter köra efter paus!");
+                                ConsoleInterface.WriteEvent($"{car.Name}: Fortsätter köra efter paus!");
                             }
-                            // Hoppa över avståndsuppdatering om bilen är pausad
+                            // Om bilen fortfarande är pausad så hoppar vi över koden nedan
+                            // där avklarad sträcka ökar
                             continue;
                         }
 
-                        double currentSpeed = car.Speed * 1000 / 3600; // Uppdateras varje sekund
+                        double currentSpeed = car.Speed * 1000 / 3600;
                         car.Distance += currentSpeed;
                     }
 
+                    // +1 sekund varje sekund
                     secondsPassed++;
 
+                    // Leta efter ett random event var 10e sekund
                     if (secondsPassed % 10 == 0)
                         CheckForRandomEvent(car);
 
+                    // Bilen kör i mål vid 5000 m
                     if (car.Distance >= 5000)
                     {
                         lock (statusLock)
                         {
                             car.Finished = true;
                             car.Speed = 0;
-                            WriteEvent($"{car.Name} har nått mållinjen!");
+                            ConsoleInterface.WriteEvent($"{car.Name} har nått mållinjen!");
                         }
+                        // Avsluta racet (lämna loopen)
                         break;
                     }
                 }
             }
+            // Block för sprängd bil
             catch (Exception ex)
             {
-                WriteEvent($"{car.Name}: {ex.Message}");
+                ConsoleInterface.WriteEvent($"{car.Name}: {ex.Message}");
                 lock (statusLock)
                 {
                     if (ex.Message == "Bilen sprängdes.")
@@ -189,82 +159,53 @@ namespace Labb2_ThreadsAndAsync.Handler
         {
             lock (statusLock)
             {
-                int mineChance = rng.Next(1, 1001); // 1 på 1 000 chans
+                // 1 på 1000 att bilen sprängs
+                int mineChance = rng.Next(1, 1001);
                 if (mineChance == 1)
                 {
-                    WriteEvent($"{car.Name}: Kör på en mina! 💣 Bilen sprängs.");
+                    ConsoleInterface.WriteEvent($"{car.Name}: Kör på en mina! 💣 Bilen sprängs.");
                     throw new Exception("Bilen sprängdes.");
                 }
 
-                int chance = rng.Next(1, 51); // 1 till 50
+                int chance = rng.Next(1, 51);
 
                 if (chance == 1)
                 {
-                    WriteEvent($"{car.Name}: Slut på bensin! ⛽ Pausar i 15 sekunder.");
+                    ConsoleInterface.WriteEvent($"{car.Name}: Slut på bensin! ⛽ Pausar i 15 sekunder.");
                     car.IsPaused = true;
-                    car.PauseUntil = DateTime.Now.AddSeconds(15); // 15 sekunder från nu
+                    car.PauseUntil = DateTime.Now.AddSeconds(15);
                 }
                 else if (chance <= 3)
                 {
-                    WriteEvent($"{car.Name}: Punktering! 🛞 Pausar i 10 sekunder.");
+                    ConsoleInterface.WriteEvent($"{car.Name}: Punktering! 🛞 Pausar i 10 sekunder.");
                     car.IsPaused = true;
                     car.PauseUntil = DateTime.Now.AddSeconds(10);
                 }
                 else if (chance <= 8)
                 {
-                    WriteEvent($"{car.Name}: Fågel på vindrutan! 🐦 Pausar i 5 sekunder.");
+                    ConsoleInterface.WriteEvent($"{car.Name}: Fågel på vindrutan! 🐦 Pausar i 5 sekunder.");
                     car.IsPaused = true;
                     car.PauseUntil = DateTime.Now.AddSeconds(5);
                 }
                 else if (chance <= 18)
                 {
                     car.Speed = Math.Max(1, car.Speed - 1);
-                    WriteEvent($"{car.Name}: Motorproblem! 🔧 Ny hastighet: {car.Speed} km/h.");
+                    ConsoleInterface.WriteEvent($"{car.Name}: Motorproblem! 🔧 Ny hastighet: {car.Speed} km/h.");
                 }
             }
         }
 
-        static void UserInput()
+        static async Task UserInput()
         {
             while (!raceOver)
             {
-                string input = Console.ReadLine();
-                if (input == "" || input.ToLower() == "status")
+                string input = await Console.In.ReadLineAsync();
+                if (string.IsNullOrEmpty(input) || input.ToLower() == "status")
                 {
-                    lock (statusLock)
-                    {
-                        lock (consoleLock)
-                        {
-                            ClearStatusColumn(); // Rensa höger kolumn
-                            Console.SetCursorPosition(statusColumn, 0);
-                            Console.WriteLine("📊 Statusuppdatering:");
-                            int statusRow = 1;
-
-                            if (cars.All(c => c.Finished || c.Exploded))
-                            {
-                                Console.SetCursorPosition(statusColumn, statusRow);
-                                Console.WriteLine("🚫 Inga bilar kvar i racet.");
-                            }
-                            else
-                            {
-                                foreach (var car in cars)
-                                {
-                                    Console.SetCursorPosition(statusColumn, statusRow);
-                                    if (car.Exploded)
-                                        Console.WriteLine($"{car.Name}: ❌ Bilen är sprängd.");
-                                    else if (car.Finished)
-                                        Console.WriteLine($"{car.Name}: ✅ Har nått mållinjen.");
-                                    else if (car.IsPaused)
-                                        Console.WriteLine($"{car.Name}: ⏸ Pausad - 📍 {car.Distance:F1} m - 🚗 {car.Speed:F1} km/h");
-                                    else
-                                        Console.WriteLine($"{car.Name}: 📍 {car.Distance:F1} m - 🚗 {car.Speed:F1} km/h");
-                                    statusRow++;
-                                }
-                            }
-                        }
-                    }
+                    ConsoleInterface.WriteStatus(cars);
                 }
             }
         }
+
     }
 }
