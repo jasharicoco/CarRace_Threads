@@ -14,20 +14,27 @@ namespace Labb2_ThreadsAndAsync.Interface
         {
             lock (consoleLock)
             {
+                // Börja på 0,x
                 Console.SetCursorPosition(0, eventRow);
+                // Ta 55 "kolumner"
                 Console.WriteLine(message.PadRight(55));
+                // Ny rad varje gång
                 eventRow++;
+                // Rensa "event-konsolen" när alla rader är tagna
                 if (eventRow >= Console.WindowHeight - 1)
                 {
+                    // Rensa konsolen
                     Console.Clear();
-                    eventRow = 0;
+                    // Börja utskrifterna på rad nr 2
+                    eventRow = 2;
+                    // Skriv följande på rad nr 0
                     Console.SetCursorPosition(0, 0);
                     Console.WriteLine("🏁 Tävlingen fortsätter!\n");
                 }
             }
         }
 
-        // Rensa statuskolumnen
+        // Rensa statuskolumnen (körs mellan varje statusuppdatering)
         public static void ClearStatusColumn()
         {
             lock (consoleLock)
@@ -48,7 +55,7 @@ namespace Labb2_ThreadsAndAsync.Interface
                 ClearStatusColumn();
                 Console.SetCursorPosition(statusColumn, 0);
                 Console.WriteLine("📊 Statusuppdatering:");
-                int statusRow = 1;
+                int statusRow = 2;
 
                 if (cars.All(c => c.Finished || c.Exploded))
                 {
@@ -57,7 +64,10 @@ namespace Labb2_ThreadsAndAsync.Interface
                 }
                 else
                 {
-                    foreach (var car in cars)
+                    // Sortera bilarna baserat på Distance i fallande ordning
+                    var sortedCars = cars.OrderByDescending(c => c.Distance).ToList();
+
+                    foreach (var car in sortedCars)
                     {
                         Console.SetCursorPosition(statusColumn, statusRow);
                         if (car.Exploded)
@@ -73,5 +83,6 @@ namespace Labb2_ThreadsAndAsync.Interface
                 }
             }
         }
+
     }
 }

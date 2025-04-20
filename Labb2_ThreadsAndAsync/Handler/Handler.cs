@@ -126,6 +126,10 @@ namespace Labb2_ThreadsAndAsync.Handler
                     if (secondsPassed % 10 == 0)
                         CheckForRandomEvent(car);
 
+                    // Ge statusuppdatering varje sekund
+                    if (secondsPassed % 1 == 0)
+                        ConsoleInterface.WriteStatus(cars);
+
                     // Bilen kör i mål vid 5000 m
                     if (car.Distance >= 5000)
                     {
