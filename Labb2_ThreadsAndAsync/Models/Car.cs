@@ -10,6 +10,7 @@
         public bool Winner { get; set; } = false; // Vinnare
         public bool IsPaused { get; set; } // Indikerar om bilen är pausad
         public DateTime PauseUntil { get; set; } // Tidpunkt när pausen slutar
+        public int? FinishPosition { get; set; } // Null tills bilen går i mål
 
     }
 }

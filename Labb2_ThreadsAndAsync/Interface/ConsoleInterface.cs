@@ -64,25 +64,70 @@ namespace Labb2_ThreadsAndAsync.Interface
                 }
                 else
                 {
-                    // Sortera bilarna baserat på Distance i fallande ordning
-                    var sortedCars = cars.OrderByDescending(c => c.Distance).ToList();
+                    var finishedCars = cars
+                        .Where(c => c.Finished && !c.Exploded)
+                        .OrderBy(c => c.FinishPosition ?? int.MaxValue)
+                        .ToList();
+
+                    var activeCars = cars
+                        .Where(c => !c.Finished && !c.Exploded)
+                        .OrderByDescending(c => c.Distance)
+                        .ToList();
+
+                    var explodedCars = cars
+                        .Where(c => c.Exploded)
+                        .ToList();
+
+                    var sortedCars = finishedCars
+                        .Concat(activeCars)
+                        .Concat(explodedCars)
+                        .ToList();
+
+                    int position = 1;
 
                     foreach (var car in sortedCars)
                     {
                         Console.SetCursorPosition(statusColumn, statusRow);
-                        if (car.Exploded)
-                            Console.WriteLine($"{car.Name}: ❌ Bilen är sprängd.");
-                        else if (car.Finished)
-                            Console.WriteLine($"{car.Name}: ✅ Har nått mållinjen.");
-                        else if (car.IsPaused)
-                            Console.WriteLine($"{car.Name}: ⏸ Pausad - 📍 {car.Distance:F1} m - 🚗 {car.Speed:F1} km/h");
+
+                        if (!car.Exploded)
+                            Console.Write($"{position++}) ");
                         else
+                            Console.Write("   ");
+
+                        if (car.Exploded)
+                        {
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine($"{car.Name}: ❌ Bilen är sprängd.");
+                        }
+                        else if (car.Finished && car.Winner)
+                        {
+                            Console.ForegroundColor = ConsoleColor.Yellow;
+                            Console.WriteLine($"{car.Name}: 🏆 Vinnare!");
+                        }
+                        else if (car.Finished)
+                        {
+                            Console.ForegroundColor = ConsoleColor.Green;
+                            Console.WriteLine($"{car.Name}: ✅ Har nått mållinjen (Plats {car.FinishPosition})");
+                        }
+                        else if (car.IsPaused)
+                        {
+                            Console.ForegroundColor = ConsoleColor.Yellow;
+                            Console.WriteLine($"{car.Name}: ⏸ Pausad - 📍 {car.Distance:F1} m - 🚗 {car.Speed:F1} km/h");
+                        }
+                        else
+                        {
+                            Console.ResetColor();
                             Console.WriteLine($"{car.Name}: 📍 {car.Distance:F1} m - 🚗 {car.Speed:F1} km/h");
+                        }
+
+                        Console.ResetColor();
                         statusRow++;
                     }
                 }
             }
         }
+
+
 
     }
 }

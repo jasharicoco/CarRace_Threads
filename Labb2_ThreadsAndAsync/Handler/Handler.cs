@@ -10,6 +10,7 @@ namespace Labb2_ThreadsAndAsync.Handler
         static bool raceOver = false;
         static bool winnerFound = false;
         static int startedCount = 0;
+        static int nextFinishPosition = 1;
         private static readonly Random rng = new Random();
 
         public static async Task Run()
@@ -137,6 +138,12 @@ namespace Labb2_ThreadsAndAsync.Handler
                         {
                             car.Finished = true;
                             car.Speed = 0;
+
+                            if (car.FinishPosition == null)
+                            {
+                                car.FinishPosition = nextFinishPosition++;
+                            }
+
                             ConsoleInterface.WriteEvent($"{car.Name} har nått mållinjen!");
                         }
                         // Avsluta racet (lämna loopen)
@@ -163,8 +170,8 @@ namespace Labb2_ThreadsAndAsync.Handler
         {
             lock (statusLock)
             {
-                // 1 på 1000 att bilen sprängs
-                int mineChance = rng.Next(1, 1001);
+                // 1 på 25 att bilen sprängs
+                int mineChance = rng.Next(1, 26);
                 if (mineChance == 1)
                 {
                     ConsoleInterface.WriteEvent($"{car.Name}: Kör på en mina! 💣 Bilen sprängs.");
